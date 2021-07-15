@@ -1,0 +1,39 @@
+pipeline {
+  agent any
+  options {
+    ansiColor('xterm')  // Plugin AnsiColor
+  }
+  environment {
+    AWS_DEFAULT_REGION='eu-central-1' // Added variable
+  }
+  stages {
+    stage ('clone git repo') {
+      steps {
+        git 'https://github.com/OMironyuk/Certification_work.git'
+      }
+    }
+    stage('TF Init&Apply') {
+      steps {
+        withAWS(credentials: 'AWS-creds') { //plugin Pipeline: AWS Steps for AWS credentials
+          sh 'terraform init'
+          sh 'terraform apply -auto-approve'
+        }
+      }
+    }
+    stage ('Provisioning build by ansible') {
+      steps {
+        withAWS(credentials: 'AWS-creds') {
+          ansiblePlaybook colorized: true, credentialsId: 'jenkins-key', installation: 'Ansible', playbook: 'playbook.yml', inventory: 'inventory', disableHostKeyChecking: true, extras: "-e aws_region=\"${env.AWS_DEFAULT_REGION}\"" //plugin Ansible
+        }
+      }
+    }
+    stage('TF destroy aws_instance "build"') {
+      steps {
+        withAWS(credentials: 'AWS-creds') {
+          sh 'terraform destroy -target aws_instance.build -auto-approve'
+          sh 'terraform output app_url'
+        }
+      }
+    }
+  }
+}
